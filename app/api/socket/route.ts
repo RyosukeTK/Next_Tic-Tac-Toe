@@ -6,7 +6,7 @@ const io = new SocketIO({
   addTrailingSlash: false,
 });
 
-const rooms = new Map();
+const rooms = new Map<string, Set<string>>();
 
 io.on('connection', (socket) => {
   console.log('A client connected');
@@ -16,9 +16,13 @@ io.on('connection', (socket) => {
     if (!rooms.has(room)) {
       rooms.set(room, new Set());
     }
-    rooms.get(room).add(socket.id);
-    io.to(room).emit('room-update', rooms.get(room).size);
-    console.log(`Client joined room: ${room}`);
+    rooms.get(room)!.add(socket.id);
+    const playerCount = rooms.get(room)!.size;
+    io.to(room).emit('room-update', playerCount);
+    console.log(`Client joined room: ${room}. Players in room: ${playerCount}`);
+
+    // 新しいプレイヤーに現在のプレイヤー数を送信
+    socket.emit('player-number', playerCount === 1 ? 'X' : 'O');
   });
 
   socket.on('start-game', (room: string) => {
@@ -37,15 +41,17 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    Array.from(rooms.entries()).forEach(([room, players]) => {
+    for (const [room, players] of rooms.entries()) {
       if (players.has(socket.id)) {
         players.delete(socket.id);
-        io.to(room).emit('room-update', players.size);
-        if (players.size === 0) {
+        const playerCount = players.size;
+        io.to(room).emit('room-update', playerCount);
+        console.log(`Client left room: ${room}. Players in room: ${playerCount}`);
+        if (playerCount === 0) {
           rooms.delete(room);
         }
       }
-    });
+    }
     console.log('A client disconnected');
   });
 });
